@@ -28,6 +28,7 @@
 
 // extern option variables
 bool                opt_debug;
+e_int_set_t         opt_explicit_int;
 char const         *opt_fin;
 char const         *opt_fout;
 bool                opt_interactive;
@@ -47,6 +48,7 @@ static struct option const LONG_OPTS[] = {
   { "debug",        no_argument,        NULL, 'd' },
   { "file",         required_argument,  NULL, 'f' },
   { "language",     required_argument,  NULL, 'x' },
+  { "int",          required_argument,  NULL, 'I' },
   { "interactive",  no_argument,        NULL, 'i' },
   { "output",       required_argument,  NULL, 'o' },
   { "quiet",        no_argument,        NULL, 'q' },
@@ -54,7 +56,7 @@ static struct option const LONG_OPTS[] = {
   { "yydebug",      no_argument,        NULL, 'D' },
   { NULL,           0,                  NULL, 0   }
 };
-static char const   SHORT_OPTS[] = "89acdC:Df:iko:pqvx:";
+static char const   SHORT_OPTS[] = "89acdC:Df:iI:ko:pqvx:";
 
 // local variables
 static char         opts_given[ 128 ];
@@ -193,6 +195,85 @@ static color_when_t parse_color_when( char const *when ) {
   );
 }
 
+#define ADD_E_INT(T) \
+  BLOCK( if ( ei_type & (T) ) goto dup_modifier; ei_type |= (T); )
+
+#define CHECK_ADD_E_INT(EI_INDEX,T) \
+  BLOCK( if ( ei_index != (EI_INDEX) ) goto incompatible; ADD_E_INT( T ); )
+
+/**
+ * Parses explicit int modifiers.
+ *
+ * @param s The null-terminated string to parse.
+ * @param ei_set The e_int_set_t to parse into.
+ */
+static void parse_explicit_int( char const *s, e_int_set_t ei_set ) {
+  char const *c;
+  char opt_buf[ OPT_BUF_SIZE ];
+
+  memset( ei_set, T_NONE, sizeof( e_int_set_t ) );
+  char *spec = (char*)free_later( check_strdup( s ) );
+
+  for ( char *group; (group = strsep( &spec, "," )); ) {
+    explicit_int_t ei_index;
+
+    c = group;
+    switch ( *c ) {
+      case 's': ei_index = EI_SHORT;      break;
+      case 'l': ei_index = EI_LONG;       break;
+      case 'L': ei_index = EI_LONG_LONG;  break;
+      default :
+        PMESSAGE_EXIT( EX_USAGE,
+          "\"%s\": invalid explicit int modifier for %s:"
+          " '%c': must start with one of [slL]\n",
+          s, format_opt( 'I', opt_buf, sizeof opt_buf ), *c
+        );
+    } // switch
+
+    if ( *++c != ':' )
+      PMESSAGE_EXIT( EX_USAGE,
+        "\"%s\": invalid explicit int modifier for %s:"
+        " ':': expected\n",
+        s, format_opt( 'I', opt_buf, sizeof opt_buf )
+      );
+
+    c_type_t ei_type = T_NONE;
+    while ( *++c ) {
+      switch ( *c ) {
+        case 's': CHECK_ADD_E_INT( EI_SHORT,     T_SHORT     ); break;
+        case 'l': CHECK_ADD_E_INT( EI_LONG,      T_LONG      ); break;
+        case 'L': CHECK_ADD_E_INT( EI_LONG_LONG, T_LONG_LONG ); break;
+        case 'S': ADD_E_INT( T_SIGNED );                        break;
+        case 'u': ADD_E_INT( T_UNSIGNED );                      break;
+        default :
+          PMESSAGE_EXIT( EX_USAGE,
+            "\"%s\": invalid explicit int modifier for %s;"
+            " '%c': must be one of: [slLSu]\n",
+            s, format_opt( 'I', opt_buf, sizeof opt_buf ), *c
+          );
+      } // switch
+    } // while
+
+    ei_set[ ei_index ] = ei_type;
+  } // for
+
+  return;
+
+dup_modifier:
+  PMESSAGE_EXIT( EX_USAGE,
+    "\"%s\": invalid explicit int modifiers for %s;"
+    " '%c' specified more than once\n",
+    s, format_opt( 'I', opt_buf, sizeof opt_buf ), *c
+  );
+
+incompatible:
+  PMESSAGE_EXIT( EX_USAGE,
+    "\"%s\": invalid explicit int modifiers for %s;"
+    " '%c': int modifier incompatible for current group\n",
+    s, format_opt( 'I', opt_buf, sizeof opt_buf ), *c
+  );
+}
+
 /**
  * Parses a language name.
  *
@@ -268,20 +349,21 @@ static void parse_options( int argc, char const *argv[] ) {
     SET_OPTION( opt );
     switch ( opt ) {
       case 'a': // cdecl 2.x compatibility
-      case '8': opt_lang        = LANG_C_89;                  break;
-      case '9': opt_lang        = LANG_C_99;                  break;
-      case 'c': opt_make_c      = true;                       break;
-      case 'C': color_when      = parse_color_when( optarg ); break;
-      case 'd': opt_debug       = true;                       break;
-      case 'D': yydebug         = true;                       break;
-      case 'f': opt_fin         = optarg;                     break;
-      case 'i': opt_interactive = true;                       break;
-      case 'o': opt_fout        = optarg;                     break;
+      case '8': opt_lang          = LANG_C_89;                    break;
+      case '9': opt_lang          = LANG_C_99;                    break;
+      case 'c': opt_make_c        = true;                         break;
+      case 'C': color_when        = parse_color_when( optarg );   break;
+      case 'd': opt_debug         = true;                         break;
+      case 'D': yydebug           = true;                         break;
+      case 'f': opt_fin           = optarg;                       break;
+      case 'i': opt_interactive   = true;                         break;
+      case 'I': parse_explicit_int( optarg, opt_explicit_int );   break;
+      case 'o': opt_fout          = optarg;                       break;
       case 'p': // cdecl 2.x compatibility
-      case 'k': opt_lang        = LANG_C_KNR;                 break;
-      case 'q': opt_quiet       = true;                       break;
-      case 'v': print_version   = true;                       break;
-      case 'x': opt_lang        = parse_lang( optarg );       break;
+      case 'k': opt_lang          = LANG_C_KNR;                   break;
+      case 'q': opt_quiet         = true;                         break;
+      case 'v': print_version     = true;                         break;
+      case 'x': opt_lang          = parse_lang( optarg );         break;
       default : usage();
     } // switch
   } // for
@@ -290,7 +372,7 @@ static void parse_options( int argc, char const *argv[] ) {
   check_mutually_exclusive( "9", "8akpx" );
   check_mutually_exclusive( "a", "px" );
   check_mutually_exclusive( "x", "89akp" );
-  check_mutually_exclusive( "v", "89acdDfikopqx" );
+  check_mutually_exclusive( "v", "89acdDfiIkopqx" );
 
   if ( print_version ) {
     PRINT_ERR( "%s\n", PACKAGE_STRING );

@@ -253,7 +253,8 @@ char const* c_type_name( c_type_t type ) {
     type &= ~T_SIGNED;
   }
 
-  if ( (type & (T_UNSIGNED | T_SHORT | T_LONG | T_LONG_LONG)) ) {
+  //if ( (type & (T_UNSIGNED | T_SHORT | T_LONG | T_LONG_LONG)) ) {
+  if ( (type & ~opt_explicit_int) ) {
     //
     // Special case: explicit "int" isn't needed when at least one int modifier
     // is present.

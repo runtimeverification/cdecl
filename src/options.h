@@ -15,6 +15,7 @@
 
 // local
 #include "config.h"                     /* must go first */
+#include "types.h"
 #include "lang.h"                       /* for lang_t */
 
 // standard
@@ -23,8 +24,18 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+enum explicit_int {
+  EI_SHORT,
+  EI_LONG,
+  EI_LONG_LONG
+};
+typedef enum explicit_int explicit_int_t;
+
+typedef c_type_t e_int_set_t[3];
+
 // extern option variables
 extern bool         opt_debug;
+extern e_int_set_t  opt_explicit_int;
 extern char const  *opt_fin;
 extern char const  *opt_fout;
 extern bool         opt_interactive;

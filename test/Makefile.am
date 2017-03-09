@@ -9,6 +9,8 @@ AUTOMAKE_OPTIONS = 1.12			# needed for TEST_LOG_DRIVER
 
 # Command-line tests
 TESTS =	tests/cdecl-ap.test \
+	tests/cdecl-Iss.test \
+	tests/cdecl-Ix.test \
 	tests/cdecl-x.test
 
 # C tests
